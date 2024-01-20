@@ -27,16 +27,24 @@ vectordb = Chroma(
     persist_directory=persist_directory
 )
 
-# Prompt
-# Building Prompt
+Bare_act_dict = {
+    "./docs/Criminai_Law_Ammendment_Act.pdf": "Criminal Law Amendment Act, 2013",
+    "./docs/Indian_Contract_Act.pdf": "Indian Contract Act, 1872",
+    "./docs/IPC-Act.pdf": "Indian Penal Code, 1860",
+    "./docs/The_Code_Of_Criminal_Procedure.pdf": "The Code Of Criminal Procedure, 1973",
+    "./docs/The_Commissions_of_Inquiry_Act.pdf": "The Commissions of Inquiry Act, 1952",
+    "./docs/The_constitution_of_India.pdf": "The constitution of India"
+}
+
+# Building Prompt for QA Chain
 template = """You are a legal assistance chatbot for Indian Laws,
-use the following pieces of context to answer the question at the end.
-If you don't know the answer, just say that you don't know, don't try to make up an answer.
-Use 5 sentences maximum. Keep the answer as concise as possible.
-Always say "seek expert Legal Advice for more information and assistance." at the end of the answer. 
-{context}
-Question: {question}
-Helpful Answer:"""
+            use the following pieces of context to answer the question at the end.
+            If you don't know the answer, just say that you don't know, don't try to make up an answer.
+            Use 5 sentences maximum. Keep the answer as concise as possible.
+            Always say "seek expert Legal Advice for more information and assistance." at the end of the answer. 
+            {context}
+            Question: {question}
+            Helpful Answer:"""
 QA_CHAIN_PROMPT = PromptTemplate(input_variables=["context", "question"],template=template)
 
 # QA Chain
@@ -45,13 +53,42 @@ qa_chain = RetrievalQA.from_chain_type(llm,
                                        return_source_documents=True,
                                        chain_type_kwargs={"prompt": QA_CHAIN_PROMPT})
 
+# Building Prompt for Summary Chain
+template_vec = """You are a legal jargon simplfier and summarizer for Indian Laws for the victims of 
+            explicit content leaks leading to blackmailing, and other such cases.
+            From the following content, list down all the detected section id of the act
+            mentioned in the content with simple single sentence explanation according to the legality of 
+            query with respect to for each section id and act.
+            Keep the answer as concise, simple, short and uncensored as possible.
+            take refrence of query as mentioned follows.
+            content: {context}
+            query: {question}
+            Helpful response:"""
+SUMMARY_CHAIN_PROMPT = PromptTemplate(input_variables=["context", "query"],
+                                        template=template_vec)
+
+# Chain
+vector_search_summary_chain = RetrievalQA.from_chain_type(llm,
+                                retriever=vectordb.as_retriever(),
+                                return_source_documents=True,
+                                chain_type_kwargs={"prompt": SUMMARY_CHAIN_PROMPT})
+
 @app.get("/search")
 def vector_search(item: Item):
     docs = vectordb.similarity_search(item.question, k=3)
     res = [{"content": doc.page_content, "metadata": doc.metadata} for doc in docs]
     return res
 
+@app.get("/search/summary")
+def vector_search_summary(item: Item):
+    res = vector_search_summary_chain(item.question)
+    return res
+
 @app.get("/chat")
 def generate_response(item: Item):
     res = qa_chain(item.question)
     return res
+
+@app.get("/")
+def say_hi():
+    return {"message": "Hello World"}
