@@ -7,4 +7,4 @@ RAG app and vector-database with Langchain 🦜🔗 and Chromadb
 
 2. Run the app:
    ```bash
-   uvicorn main:app --host 0.0.0.0 --port 80
+   uvicorn main:app --host 0.0.0.0 --port 8000

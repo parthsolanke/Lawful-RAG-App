@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
+from fastapi.middleware.cors import CORSMiddleware
 
 import os
 import openai
@@ -16,6 +17,15 @@ persist_directory = "../db/vectorstore"
 embedding = OpenAIEmbeddings()
 
 app = FastAPI()
+
+origins = ["*"] 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    )
 
 class Item(BaseModel):
     question: str
@@ -40,7 +50,8 @@ Bare_act_dict = {
 template = """You are a legal assistance chatbot for Indian Laws,
             use the following pieces of context to answer the question at the end.
             If you don't know the answer, just say that you don't know, don't try to make up an answer.
-            Use 5 sentences maximum. Keep the answer as concise as possible.
+            also make sure to include concerned section ids and acts in the answer.
+            Keep the answer as concise as possible.
             Always say "seek expert Legal Advice for more information and assistance." at the end of the answer. 
             {context}
             Question: {question}
@@ -58,8 +69,8 @@ template_vec = """You are a legal jargon simplfier and summarizer for Indian Law
             explicit content leaks leading to blackmailing, and other such cases.
             From the following content, list down all the detected section id of the act
             mentioned in the content with simple single sentence explanation according to the legality of 
-            query with respect to for each section id and act.
-            Keep the answer as concise, simple, short and uncensored as possible.
+            query with respect to for each section id and act (also add a newline char at the end of thesection id sentence).
+            Keep the answer as concise, simple and uncensored as possible.
             take refrence of query as mentioned follows.
             content: {context}
             query: {question}
@@ -73,18 +84,18 @@ vector_search_summary_chain = RetrievalQA.from_chain_type(llm,
                                 return_source_documents=True,
                                 chain_type_kwargs={"prompt": SUMMARY_CHAIN_PROMPT})
 
-@app.get("/search")
+@app.post("/search")
 def vector_search(item: Item):
     docs = vectordb.similarity_search(item.question, k=3)
     res = [{"content": doc.page_content, "metadata": doc.metadata} for doc in docs]
     return res
 
-@app.get("/search/summary")
+@app.post("/search/summary")
 def vector_search_summary(item: Item):
     res = vector_search_summary_chain(item.question)
     return res
 
-@app.get("/chat")
+@app.post("/chat")
 def generate_response(item: Item):
     res = qa_chain(item.question)
     return res
